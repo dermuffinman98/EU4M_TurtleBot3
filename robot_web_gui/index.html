@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TurtleBot3 Live SLAM & Control</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #121212;
+      color: #f0f0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0;
+      padding: 20px;
+      gap: 16px;
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: #1e1e1e;
+      padding: 12px 20px;
+      border-radius: 8px;
+      border: 1px solid #333;
+    }
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: bold;
+    }
+    .light {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #e53935;
+      box-shadow: 0 0 8px #e53935;
+    }
+    .light.connected {
+      background: #43a047;
+      box-shadow: 0 0 10px #43a047;
+    }
+
+    /* Battery Indicator */
+    .battery-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #262626;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid #3a3a3a;
+      font-size: 0.9rem;
+    }
+    .battery-shell {
+      width: 42px;
+      height: 18px;
+      border: 2px solid #bbb;
+      border-radius: 4px;
+      padding: 2px;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .battery-shell::after {
+      content: "";
+      position: absolute;
+      right: -5px;
+      width: 3px;
+      height: 8px;
+      background: #bbb;
+      border-radius: 0 2px 2px 0;
+    }
+    .battery-fill {
+      height: 100%;
+      width: 0%;
+      background: #43a047;
+      border-radius: 2px;
+      transition: width 0.4s ease, background 0.4s ease;
+    }
+    .battery-meta {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+    }
+    .battery-sub {
+      font-size: 0.75rem;
+      color: #aaa;
+    }
+
+    /* Standby Slide Switch */
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 0.88rem;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 25px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: #c62828;
+      border-radius: 25px;
+      transition: 0.25s;
+    }
+    .slider::before {
+      position: absolute;
+      content: "";
+      height: 19px;
+      width: 19px;
+      left: 3px;
+      bottom: 3px;
+      background-color: #fff;
+      border-radius: 50%;
+      transition: 0.25s;
+    }
+    input:checked + .slider {
+      background-color: #2e7d32;
+    }
+    input:checked + .slider::before {
+      transform: translateX(25px);
+    }
+
+    /* Header Mode Buttons (Scan Mode & Autopilot On/Off) */
+    .mode-btn {
+      padding: 7px 13px;
+      border-radius: 6px;
+      border: 1px solid #455a64;
+      font-weight: 700;
+      font-size: 0.84rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s, border-color 0.15s, transform 0.08s, opacity 0.15s;
+    }
+    .mode-btn:active {
+      transform: scale(0.97);
+    }
+    .scan-btn {
+      background: #263238;
+      color: #b0bec5;
+      border-color: #455a64;
+    }
+    .scan-btn.auto {
+      background: #00695c;
+      color: #e0f2f1;
+      border-color: #26a69a;
+      box-shadow: 0 0 10px rgba(38, 166, 154, 0.35);
+    }
+    .autopilot-btn {
+      background: #2b2b2b;
+      color: #9e9e9e;
+      border-color: #424242;
+    }
+    .autopilot-btn.ready {
+      background: #1a2733;
+      color: #81d4fa;
+      border-color: #0277bd;
+    }
+    .autopilot-btn.active {
+      background: #0277bd;
+      color: #ffffff;
+      border-color: #4fc3f7;
+      box-shadow: 0 0 10px rgba(41, 182, 246, 0.45);
+    }
+
+    /* Notification Banner (Error & Success) */
+    .alert-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: #3b1212;
+      color: #ff8a80;
+      border: 1px solid #e53935;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.92rem;
+      max-width: 1020px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .alert-banner.success {
+      background: #12331a;
+      color: #81c784;
+      border-color: #43a047;
+    }
+    .alert-banner.visible {
+      display: flex;
+    }
+    .alert-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .alert-close {
+      background: none;
+      border: none;
+      color: inherit;
+      font-size: 1.1rem;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .main-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .panel {
+      background: #1e1e1e;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+    .right-column {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      width: 350px;
+    }
+    .right-column .panel {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 12px;
+      gap: 12px;
+    }
+    .panel-header h3 {
+      margin: 0;
+    }
+    .map-source-pill {
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #263238;
+      color: #80cbc4;
+      border: 1px solid #37474f;
+    }
+    .map-source-pill.uploaded {
+      background: #1a237e;
+      color: #90caf9;
+      border-color: #3949ab;
+    }
+    canvas {
+      background: #2b2b2b;
+      border: 1px solid #444;
+      border-radius: 4px;
+    }
+    canvas.pin-cursor {
+      cursor: crosshair;
+    }
+
+    /* Map Action Toolbar */
+    .map-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+      width: 100%;
+      justify-content: center;
+    }
+    .btn {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.83rem;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.08s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:active {
+      transform: scale(0.97);
+    }
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .btn-primary {
+      background: #00897b;
+      color: #ffffff;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: #00acc1;
+    }
+    .btn-upload {
+      background: #1565c0;
+      color: #ffffff;
+    }
+    .btn-upload:hover:not(:disabled) {
+      background: #1e88e5;
+    }
+    .btn-pose {
+      background: #5e35b1;
+      color: #ffffff;
+    }
+    .btn-pose.active {
+      background: #8e24aa;
+      box-shadow: 0 0 0 2px #ce93d8;
+    }
+    .btn-pin {
+      background: #ef6c00;
+      color: #ffffff;
+    }
+    .btn-pin.off {
+      background: #37474f;
+      color: #cfd8dc;
+    }
+    .btn-secondary {
+      background: #37474f;
+      color: #eceff1;
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background: #455a64;
+    }
+    .btn-danger {
+      background: #8e2424;
+      color: #ffcdd2;
+    }
+    .btn-danger:hover:not(:disabled) {
+      background: #b71c1c;
+    }
+    .btn-sm {
+      padding: 5px 9px;
+      font-size: 0.77rem;
+    }
+
+    /* Waypoint & Autopilot Card */
+    .wp-hint {
+      font-size: 0.8rem;
+      color: #aaa;
+      width: 100%;
+      margin: 0 0 10px 0;
+      line-height: 1.35;
+    }
+    .engine-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      margin-bottom: 10px;
+      font-size: 0.8rem;
+      color: #ccc;
+    }
+    .engine-row select {
+      background: #141414;
+      color: #f0f0f0;
+      border: 1px solid #444;
+      border-radius: 5px;
+      padding: 4px 6px;
+      font-size: 0.78rem;
+      max-width: 215px;
+    }
+    .wp-toolbar {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    .wp-list {
+      width: 100%;
+      max-height: 165px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .wp-empty {
+      font-size: 0.82rem;
+      color: #777;
+      text-align: center;
+      padding: 12px 8px;
+      border: 1px dashed #3a3a3a;
+      border-radius: 6px;
+    }
+    .wp-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: #252525;
+      border: 1px solid #383838;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 0.82rem;
+    }
+    .wp-item.is-target {
+      border-color: #ff4081;
+      background: #2b1922;
+    }
+    .wp-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: monospace;
+    }
+    .wp-num {
+      background: #ffb300;
+      color: #000;
+      font-weight: bold;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, sans-serif;
+      font-size: 0.75rem;
+    }
+    .wp-item.is-target .wp-num {
+      background: #ff4081;
+      color: #fff;
+    }
+    .wp-item-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .target-pill {
+      border: 1px solid #555;
+      background: #1e1e1e;
+      color: #ccc;
+      border-radius: 4px;
+      padding: 3px 7px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .target-pill.active {
+      background: #ff4081;
+      border-color: #ff80ab;
+      color: #fff;
+    }
+    .wp-del {
+      background: none;
+      border: none;
+      color: #ef9a9a;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 0.9rem;
+      padding: 2px 4px;
+    }
+    .autopilot-telemetry {
+      margin-top: 10px;
+      width: 100%;
+      box-sizing: border-box;
+      background: #162229;
+      border: 1px solid #284252;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.79rem;
+      color: #81d4fa;
+      font-family: monospace;
+      line-height: 1.4;
+    }
+
+    /* Save Map Modal Pop-up */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.72);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-backdrop.open {
+      display: flex;
+    }
+    .modal-card {
+      background: #1e1e1e;
+      border: 1px solid #444;
+      border-radius: 10px;
+      padding: 22px 24px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .modal-card h3 {
+      margin: 0;
+      font-size: 1.15rem;
+      color: #ffffff;
+    }
+    .modal-card p {
+      margin: 0;
+      font-size: 0.86rem;
+      color: #bbb;
+      line-height: 1.4;
+    }
+    .modal-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid #555;
+      background: #121212;
+      color: #fff;
+      font-size: 0.95rem;
+      outline: none;
+    }
+    .modal-input:focus {
+      border-color: #00acc1;
+    }
+    .file-preview {
+      font-size: 0.8rem;
+      color: #80deea;
+      background: #162226;
+      border: 1px solid #263940;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-family: monospace;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .dpad {
+      display: grid;
+      grid-template-columns: repeat(3, 56px);
+      grid-template-rows: repeat(2, 56px);
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .key {
+      background: #2a2a2a;
+      border: 2px solid #444;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      user-select: none;
+      transition: 0.08s;
+    }
+    .key.active {
+      background: #00acc1;
+      border-color: #80deea;
+      color: #000;
+      transform: scale(0.95);
+    }
+    .dpad.disabled {
+      opacity: 0.35;
+      pointer-events: none;
+    }
+    .teleop-note {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: #90caf9;
+      min-height: 1.1em;
+      text-align: center;
+    }
+    .up    { grid-column: 2; grid-row: 1; }
+    .left  { grid-column: 1; grid-row: 2; }
+    .down  { grid-column: 2; grid-row: 2; }
+    .right { grid-column: 3; grid-row: 2; }
+    .controls {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+      font-size: 0.88rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="status-badge">
+      <div id="status-light" class="light"></div>
+      <span id="status-text">Disconnected</span>
+    </div>
+
+    <!-- Battery Indicator -->
+    <div class="battery-box" title="3S LiPo (11.0V cutoff, ~0.59V/hr discharge)">
+      <div class="battery-shell">
+        <div id="battery-fill" class="battery-fill"></div>
+      </div>
+      <div class="battery-meta">
+        <span id="battery-pct">--% (--.-V)</span>
+        <span id="battery-time" class="battery-sub">Est. time: --</span>
+      </div>
+    </div>
+
+    <!-- ON/OFF Standby Slide -->
+    <div class="toggle-group">
+      <span>Standby:</span>
+      <label class="switch">
+        <input id="robot-power-switch" type="checkbox" checked />
+        <span class="slider"></span>
+      </label>
+      <span id="power-state-label" style="color: #66bb6a;">ACTIVE</span>
+    </div>
+
+    <!-- Dedicated Scan Mode Button (Manual Scan vs Auto-Explore Scan) -->
+    <button
+      id="scan-mode-btn"
+      class="mode-btn scan-btn"
+      type="button"
+      title="Toggle between Manual keyboard scanning and Autonomous Auto-Explore scanning"
+    >
+      🧭 Scan Mode: MANUAL
+    </button>
+
+    <!-- Dedicated Autopilot On/Off Button (Uploaded Map Navigation Only) -->
+    <button
+      id="autopilot-btn"
+      class="mode-btn autopilot-btn"
+      type="button"
+      title="Activate Autopilot navigation (requires an uploaded .yaml + .pgm map and a target point)"
+    >
+      🚀 Autopilot: OFF
+    </button>
+
+    <label>
+      Msg Type:
+      <select id="msg-type">
+        <option value="TwistStamped" selected>TwistStamped (Physical / Gazebo Jazzy)</option>
+        <option value="Twist">Twist (Legacy)</option>
+      </select>
+    </label>
+  </header>
+
+  <!-- Notification Banner -->
+  <div id="alert-banner" class="alert-banner" role="alert">
+    <span id="alert-message"></span>
+    <div class="alert-actions">
+      <button id="alert-action-btn" class="btn btn-upload btn-sm" type="button" style="display: none;"></button>
+      <button id="alert-close" class="alert-close" title="Dismiss">✕</button>
+    </div>
+  </div>
+
+  <div class="main-grid">
+    <!-- Left Panel: Map + Save/Upload + Pose Calibration -->
+    <div class="panel">
+      <div class="panel-header">
+        <h3>SLAM Map &amp; LiDAR</h3>
+        <span id="map-source-pill" class="map-source-pill">Source: Live SLAM (/map)</span>
+      </div>
+      <canvas id="map-canvas" class="pin-cursor" width="520" height="520"></canvas>
+      <div class="map-actions">
+        <button id="save-map-btn" class="btn btn-primary" type="button">
+          💾 Save Scan Map
+        </button>
+        <button id="upload-map-btn" class="btn btn-upload" type="button" title="Select your saved .yaml and .pgm map files">
+          📂 Upload Map
+        </button>
+        <button id="set-pose-btn" class="btn btn-pose" type="button" title="Click and drag on the map to align the robot's position and heading">
+          🤖 Set Robot Pose
+        </button>
+        <button id="resume-slam-btn" class="btn btn-secondary" type="button" style="display: none;">
+          🔄 Live SLAM
+        </button>
+        <input id="upload-map-input" type="file" accept=".yaml,.yml,.pgm" multiple hidden />
+      </div>
+    </div>
+
+    <!-- Right Column: Waypoints & Autopilot + Teleop -->
+    <div class="right-column">
+      <!-- Waypoints & Target End Point Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Waypoints &amp; Target Point</h3>
+        </div>
+        <p class="wp-hint">Upload a saved map, click open floor to set waypoints &amp; <strong>🎯 Target</strong>, then click <strong>Autopilot: ON</strong> (press <strong>Space</strong> for E-Stop).</p>
+
+        <div class="engine-row">
+          <label for="nav-engine"><strong>Nav Engine:</strong></label>
+          <select id="nav-engine">
+            <option value="builtin" selected>Built-in A* + LiDAR (/cmd_vel)</option>
+            <option value="nav2">ROS 2 Nav2 (/goal_pose)</option>
+          </select>
+        </div>
+
+        <div class="wp-toolbar">
+          <button id="toggle-pin-btn" class="btn btn-pin btn-sm" type="button">📍 Pin Mode: ON</button>
+          <button id="undo-wp-btn" class="btn btn-secondary btn-sm" type="button" disabled>↩ Undo</button>
+          <button id="clear-wp-btn" class="btn btn-danger btn-sm" type="button" disabled>🗑️ Clear</button>
+        </div>
+        <div id="wp-list" class="wp-list">
+          <div class="wp-empty">No waypoints placed yet. Click on the map to add points.</div>
+        </div>
+        <div id="autopilot-status" class="autopilot-telemetry">
+          Status: Idle (Manual Scan Mode)
+        </div>
+      </div>
+
+      <!-- Keyboard Teleop Panel -->
+      <div class="panel">
+        <h3 style="margin-top: 0;">Keyboard Teleop (Arrows / WASD)</h3>
+        <div id="dpad-container" class="dpad">
+          <div id="key-up" class="key up">▲</div>
+          <div id="key-left" class="key left">◀</div>
+          <div id="key-down" class="key down">▼</div>
+          <div id="key-right" class="key right">▶</div>
+        </div>
+        <div id="teleop-note" class="teleop-note"></div>
+
+        <div class="controls">
+          <label>Max Linear Speed: <span id="lin-val">0.14</span> m/s
+            <input id="lin-speed" type="range" min="0.04" max="0.22" step="0.01" value="0.14" />
+          </label>
+          <label>Max Angular Speed: <span id="ang-val">0.60</span> rad/s
+            <input id="ang-speed" type="range" min="0.15" max="1.50" step="0.05" value="0.60" />
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save Map Naming Pop-up -->
+  <div id="save-map-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="save-modal-title">
+    <div class="modal-card">
+      <h3 id="save-modal-title">Save Scanned Map</h3>
+      <p>Enter a name for your scanned maze map. Both the ROS 2 YAML metadata and PGM map image will be saved to your PC.</p>
+      <input
+        id="map-name-input"
+        class="modal-input"
+        type="text"
+        placeholder="e.g. maze_map_1"
+        autocomplete="off"
+      />
+      <div id="file-preview" class="file-preview">Files: maze_map_1.yaml + maze_map_1.pgm</div>
+      <div class="modal-actions">
+        <button id="cancel-save-btn" class="btn btn-secondary" type="button">Cancel</button>
+        <button id="confirm-save-btn" class="btn btn-primary" type="button">Save to PC</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
